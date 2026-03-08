@@ -14,11 +14,13 @@ def main():
     parser.add_argument("--disable_trans", action="store_true", help="禁用翻译功能")
     parser.add_argument("--disable_aed", action="store_true", help="禁用AED功能")
     parser.add_argument("--asr_model", default="large-v3",choices=["tiny", "base", "small", "medium", "large", "large-v3","turbo"],help="Whisper模型大小（默认large-v3）")
-    parser.add_argument("--w_prompt", default="愛美", help="ASR模型初始提示语")
-    parser.add_argument("--tr_prompt",default="あいみ翻译成爱美", help="翻译模型初始提示语")
+    parser.add_argument("--asr_lg",default="auto",help="ASR模型语言")
+    parser.add_argument("--asr_prompt", default="", help="ASR模型初始提示语")
+    parser.add_argument("--tr_prompt",default="", help="翻译模型初始提示语")
     parser.add_argument("--tr_content",default='',help="翻译背景")
     parser.add_argument("--tr_model", default="HY-MT1.5-7B", help="翻译模型")
     parser.add_argument("--tr_language", default="中文", help="翻译目标语言")
+    parser.add_argument("--aed_model",default="FireRedVAD/AED", help="AED模型路径")
     parser.add_argument("--chunk_max_frame", default=30000, type=int, help="AED参数：音频块最大帧数")
     parser.add_argument("--smooth_window_size", default=5, type=int, help="AED参数：滑窗大小")
     parser.add_argument("--min_event_frame", default=20, type=int, help="AED参数：事件最小帧数")
@@ -52,6 +54,10 @@ def main():
     parser.add_argument("--Encoding",default=0,help="字幕编码")
     parser.add_argument("--StrikeOut",default=0,help="字幕删除线")
     parser.add_argument("--Underline",default=0,help="字幕下划线")
+    parser.add_argument("--subx",default=None,help="字幕pos(x,y)")
+    parser.add_argument("--suby",default=None,help="字幕pos(x,y)")
+    parser.add_argument("--singx",default=None,help="唱歌部分pos(x,y)")
+    parser.add_argument("--singy",default=None,help="唱歌部分pos(x,y)")
     args = parser.parse_args()
     # 解析功能开关（默认启用所有）
     enable_asr=not args.disable_asr
@@ -67,7 +73,8 @@ def main():
         cap.release()
         if not enable_aed:
             final_subtitles = extract_asr_subtitles(video_path=args.video_path,device=args.device,model_size=args.asr_model,video_width=video_width,
-                                                    enable_aed=enable_aed,video_height=video_height)
+                                                    enable_aed=enable_aed,video_height=video_height,asr_prompt=args.asr_prompt,asr_lg=args.asr_lg,
+                                                    subx=args.subx,suby=args.suby,singx=args.singx,singy=args.singy)
         if enable_aed:
             final_subtitles = extract_asr_subtitles(video_path=args.video_path,device=args.device,model_size=args.asr_model,video_width=video_width,
                                                     enable_aed=enable_aed,video_height=video_height,chunk_max_frame=args.chunk_max_frame,
@@ -75,7 +82,8 @@ def main():
                                                     max_event_frame=args.max_event_frame,min_silence_frame=args.min_silence_frame,
                                                     merge_silence_frame=args.merge_silence_frame,extend_speech_frame=args.extend_speech_frame,
                                                     speech_threshold=args.speech_threshold,singing_threshold=args.singing_threshold,
-                                                    music_threshold=args.music_threshold)
+                                                    music_threshold=args.music_threshold,asr_prompt=args.asr_prompt,asr_lg=args.asr_lg,
+                                                    aed_model=args.aed_model,subx=args.subx,suby=args.suby,singx=args.singx,singy=args.singy)
         print(f"ASR后提取到字幕数：{len(final_subtitles)}")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
