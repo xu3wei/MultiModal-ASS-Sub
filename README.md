@@ -11,42 +11,40 @@
 - 支持 CPU/GPU 运行
 
 ## 安装依赖
-确保已安装 Python 3.8+，然后安装所需库：
-
 ```bash
 pip install opencv-python torch openai-whisper
 # 如需使用翻译功能，还需安装相关依赖（如 transformers 等，根据翻译模型要求）
 ```
 
-*注：请根据实际使用的翻译模型安装额外依赖。*
+*注：请将FireRedASR2S下载后放入该目录，并请根据实际使用的翻译模型安装额外依赖。*
 
 ## 使用方法
 基本命令格式：
 
 ```bash
-python script.py --video_path <视频路径> [其他参数]
+python main.py --video_path <视频路径> [其他参数]
 ```
 
 ### 示例
 1. **基础使用**（启用 ASR+AED，生成原文字幕）：
    ```bash
-   python script.py --video_path input.mp4
+   python main.py --video_path input.mp4
    ```
 
 2. **仅用 ASR（禁用 AED）**：
    ```bash
-   python script.py --video_path input.mp4 --disable_aed
+   python main.py --video_path input.mp4 --disable_aed
    ```
 
 3. **启用翻译**（生成原文字幕+翻译字幕）：
    ```bash
-   python script.py --video_path input.mp4
+   python main.py --video_path input.mp4
    ```
    *注：翻译功能默认启用，可通过 `--disable_trans` 禁用。*
 
 4. **自定义字幕样式**：
    ```bash
-   python script.py --video_path input.mp4 --font "微软雅黑" --font_size 60 --PrimaryColour "&H00FFFF00"
+   python main.py --video_path input.mp4 --font "微软雅黑" --font_size 60 --PrimaryColour "&H00FFFF00"
    ```
 
 ## 参数说明
