@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description="视频字幕提取：OCR硬字幕 + ASR语音 + 说话人识别")
     parser.add_argument("--yolo-model", default="model.pt", help="YOLO模型路径")
     parser.add_argument("--glm-model", default="GLM-OCR", help="GLM-OCR模型路径")
-    parser.add_argument("--video_path", default=r"2.mp4", help="视频路径")
+    parser.add_argument("--video_path", default=r"0.mp4", help="视频路径")
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"], help="运行设备")
     parser.add_argument("--frame-skip", type=int, default=3, help="OCR跳帧间隔")
     parser.add_argument("--min-frames", type=int, default=3, help="OCR最小有效帧数")
