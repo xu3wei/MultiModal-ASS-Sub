@@ -10,22 +10,21 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 logger = logging.getLogger(__name__)
 @dataclass
 class OCRConfig:
-    """简化配置，专注核心参数"""
     yolo_conf: float = 0.75
-    glm_max_batch_size: int = 32
-    glm_max_new_tokens_per_region: int = 128
+    ocr_max_batch_size: int = 32
+    ocr_max_new_tokens: int = 128
     text_region_min_area: int = 50
     use_mixed_precision: bool = True
     compile_model: bool = True
 class OCRModelEngine:
-    def __init__(self,yolo_model_path: str,glm_model_path: str = "GLM-OCR",device: str = 'cuda',config: Optional[OCRConfig] = None):
+    def __init__(self,yolo_model_path: str,ocr_model_path: str = "GLM-OCR",device: str = 'cuda',config: Optional[OCRConfig] = None):
         self.config = config or OCRConfig()
         self.device = torch.device('cuda' if (torch.cuda.is_available() and device == 'cuda') else 'cpu')
         self.dtype = torch.bfloat16 if (self.config.use_mixed_precision and self.device.type == 'cuda') else torch.float32
         self.OCR_PROMPT = "Transcribe"
         self._load_yolo(yolo_model_path)
-        self._load_glm(glm_model_path)
-        logger.info(f"设备:{self.device}|BatchSize:{self.config.glm_max_batch_size}")
+        self._load_ocr(ocr_model_path)
+        logger.info(f"设备:{self.device}|BatchSize:{self.config.ocr_max_batch_size}")
 
     def _load_yolo(self, model_path: str) -> None:
         try:
@@ -43,29 +42,29 @@ class OCRModelEngine:
         for _ in range(2):
             _ = self.yolo_detector(dummy, device=self.device, conf=0.5, verbose=False)
 
-    def _load_glm(self, model_path: str) -> None:
+    def _load_ocr(self, model_path: str) -> None:
         try:
-            self.glm_processor = AutoProcessor.from_pretrained(model_path)
-            if self.glm_processor.tokenizer.pad_token is None:
-                self.glm_processor.tokenizer.pad_token = self.glm_processor.tokenizer.eos_token
-            self.glm_model = AutoModelForImageTextToText.from_pretrained(model_path,dtype=self.dtype,device_map="auto",low_cpu_mem_usage=True).eval()
+            self.ocr_processor = AutoProcessor.from_pretrained(model_path)
+            if self.ocr_processor.tokenizer.pad_token is None:
+                self.ocr_processor.tokenizer.pad_token = self.ocr_processor.tokenizer.eos_token
+            self.ocr_model = AutoModelForImageTextToText.from_pretrained(model_path,dtype=self.dtype,device_map="auto").eval()
             if self.config.compile_model and self.device.type == 'cuda':
-                self.glm_model = torch.compile(self.glm_model, mode="reduce-overhead")
-            self._warmup_glm()
+                self.ocr_model = torch.compile(self.ocr_model, mode="reduce-overhead")
+            self._warmup_ocr()
         except Exception as e:
-            logger.error(f"GLM加载失败: {str(e)}", exc_info=True)
+            logger.error(f"OCR加载失败: {str(e)}", exc_info=True)
             raise
-    def _warmup_glm(self):
+    def _warmup_ocr(self):
         dummy_img = Image.new("RGB", (224, 224), (255, 255, 255))
         dummy_msg = [[{"role": "user","content": [{"type": "image", "image": dummy_img}, {"type": "text", "text": self.OCR_PROMPT}]}]]
         with torch.no_grad():
-            inputs = self.glm_processor.apply_chat_template(
+            inputs = self.ocr_processor.apply_chat_template(
                 dummy_msg, tokenize=True, add_generation_prompt=True,
                 return_dict=True, return_tensors="pt", padding=True,
-            ).to(self.glm_model.device)
+            ).to(self.ocr_model.device)
             inputs.pop("token_type_ids", None)
             for _ in range(2):
-                _ = self.glm_model.generate(**inputs, max_new_tokens=10, num_beams=1, do_sample=False)
+                _ = self.ocr_model.generate(**inputs, max_new_tokens=10, num_beams=1, do_sample=False)
 
     def detect_text_regions(self,frame: np.ndarray,frame_idx: int,video_width: int,video_height: int) -> List[dict]:
         try:
@@ -99,19 +98,16 @@ class OCRModelEngine:
         messages_list = []
         for r in regions:
             messages_list.append([{"role": "user", "content": [{"type": "image", "image": r["pil_image"]},{"type": "text", "text": self.OCR_PROMPT}]}])
-        for batch_start in range(0, total_size, self.config.glm_max_batch_size):
-            batch_end = min(batch_start + self.config.glm_max_batch_size, total_size)
+        for batch_start in range(0, total_size, self.config.ocr_max_batch_size):
+            batch_end = min(batch_start + self.config.ocr_max_batch_size, total_size)
             batch_messages = messages_list[batch_start:batch_end]
             try:
-                inputs = self.glm_processor.apply_chat_template(
-                    batch_messages, tokenize=True, add_generation_prompt=True,
-                    return_dict=True, return_tensors="pt", padding=True,
-                ).to(self.glm_model.device)
+                inputs=self.ocr_processor.apply_chat_template(batch_messages,tokenize=True,add_generation_prompt=True,return_dict=True,return_tensors="pt",padding=True,
+                ).to(self.ocr_model.device)
                 inputs.pop("token_type_ids", None)
                 with torch.no_grad():
-                    generated_ids = self.glm_model.generate(**inputs,max_new_tokens=self.config.glm_max_new_tokens_per_region * len(batch_messages),
-                        num_beams=1,do_sample=False,use_cache=True)
-                batch_texts = self.glm_processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[1]:],skip_special_tokens=True)
+                    generated_ids = self.ocr_model.generate(**inputs,max_new_tokens=self.config.ocr_max_new_tokens,do_sample=False,use_cache=True)
+                batch_texts = self.ocr_processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[1]:],skip_special_tokens=True)
                 for i, text in enumerate(batch_texts):
                     output_texts[batch_start + i] = text.strip()
                 del generated_ids
@@ -121,7 +117,7 @@ class OCRModelEngine:
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
             except Exception as e:
-                logger.error(f"GLM批量推理失败 [{batch_start}-{batch_end}): {str(e)[:100]}", exc_info=True)
+                logger.error(f"OCR批量推理失败 [{batch_start}-{batch_end}): {str(e)[:100]}", exc_info=True)
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
         del messages_list
